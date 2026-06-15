@@ -55,3 +55,10 @@ test_processor_output/
 test_single_slide_processing/
 tests/test_patcher_artifacts/
 rosai_processed/
+
+# Model checkpoints must remain outside Git.
+*.bin
+*.ckpt
+*.pt
+*.pth
+*.safetensors

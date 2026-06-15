@@ -101,6 +101,12 @@ class TestPatchEncoders(unittest.TestCase):
     
     def test_gpfm_forward(self):
         self._test_encoder_forward('gpfm')
+
+    def test_digepath_forward(self):
+        self._test_encoder_forward('digepath')
+
+    def test_rui_path_forward(self):
+        self._test_encoder_forward('rui_path')
     
     def test_hibou_l_forward(self):
         self._test_encoder_forward('hibou_l')

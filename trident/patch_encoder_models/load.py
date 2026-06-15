@@ -41,6 +41,8 @@ def encoder_factory(model_name: str, **kwargs) -> torch.nn.Module:
         - "musk"
         - "openmidnight"
         - "gpfm"
+        - "digepath"
+        - "rui_path"
         - "hibou_l"
         - "kaiko-vitb8"
         - "kaiko-vitb16"
@@ -147,6 +149,18 @@ class BasePatchEncoder(torch.nn.Module):
             weights_path = get_weights_path('patch', self.enc_name)
             self.ensure_valid_weights_path(weights_path)
             return weights_path
+
+    def _get_portable_weights_path(self, env_var: str, filename: str) -> str:
+        """Resolve a checkpoint from an explicit env var, shared model dir, or registry."""
+        weights_path = os.environ.get(env_var)
+        if not weights_path:
+            weights_root = os.environ.get("TRIDENT_PATCH_ENCODER_DIR")
+            if weights_root:
+                weights_path = os.path.join(weights_root, filename)
+        if weights_path:
+            self.ensure_valid_weights_path(weights_path)
+            return weights_path
+        return self._get_weights_path()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -1487,6 +1501,124 @@ class GPFMInferenceEncoder(BasePatchEncoder):
         return model, eval_transform, precision
 
 
+class DigepathInferenceEncoder(BasePatchEncoder):
+    """Digepath ViT-L/16 encoder for gastrointestinal pathology."""
+
+    def __init__(self, **build_kwargs):
+        super().__init__(**build_kwargs)
+
+    def _build(self):
+        import timm
+        from torchvision.transforms import InterpolationMode
+
+        self.enc_name = "digepath"
+        self.embedding_dim = 1024
+        weights_path = self._get_portable_weights_path(
+            "DIGEPATH_WEIGHTS_PATH",
+            "digepath.model.safetensors",
+        )
+
+        model_kwargs = {
+            "init_values": 1e-5,
+            "dynamic_img_size": True,
+        }
+
+        try:
+            if weights_path:
+                from safetensors.torch import load_file
+
+                model = timm.create_model(
+                    "vit_large_patch16_224",
+                    pretrained=False,
+                    num_classes=0,
+                    **model_kwargs,
+                )
+                state_dict = load_file(weights_path, device="cpu")
+                model.load_state_dict(state_dict, strict=True)
+            else:
+                self.ensure_has_internet(self.enc_name)
+                model = timm.create_model(
+                    "hf_hub:xtxx/Digepath",
+                    pretrained=True,
+                    **model_kwargs,
+                )
+        except Exception:
+            traceback.print_exc()
+            raise Exception(
+                f"Failed to create Digepath from checkpoint at '{weights_path}'. "
+                "Use the official safetensors checkpoint from: "
+                "https://huggingface.co/xtxx/Digepath."
+            )
+
+        mean, std = get_constants("imagenet")
+        eval_transform = get_eval_transforms(
+            mean,
+            std,
+            target_img_size=224,
+            interpolation=InterpolationMode.BILINEAR,
+            max_size=None,
+            antialias=True,
+        )
+        precision = torch.float16
+        return model, eval_transform, precision
+
+
+class RuiPathInferenceEncoder(BasePatchEncoder):
+    """RuiPath vision foundation model (ViT-L/16)."""
+
+    def __init__(self, **build_kwargs):
+        super().__init__(**build_kwargs)
+
+    def _build(self):
+        import timm
+        from torchvision.transforms import InterpolationMode
+
+        self.enc_name = "rui_path"
+        self.embedding_dim = 1024
+        weights_path = self._get_portable_weights_path(
+            "RUIPATH_WEIGHTS_PATH",
+            "ruipath_visionfoundation_v1.0.bin",
+        )
+
+        if not weights_path:
+            raise FileNotFoundError(
+                "RuiPath requires a local checkpoint. Set `rui_path` in "
+                "`trident/patch_encoder_models/local_ckpts.json` or pass `weights_path`."
+            )
+
+        try:
+            model = timm.create_model(
+                "vit_large_patch16_224",
+                pretrained=False,
+                num_classes=0,
+                init_values=1e-5,
+                dynamic_img_size=True,
+            )
+            state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
+            if isinstance(state_dict, dict) and "state_dict" in state_dict:
+                state_dict = state_dict["state_dict"]
+            model.load_state_dict(state_dict, strict=True)
+        except Exception:
+            traceback.print_exc()
+            raise Exception(
+                f"Failed to create RuiPath from checkpoint at '{weights_path}'. "
+                "See the official release instructions at: "
+                "https://www.modelscope.cn/datasets/Ruijin_Hospital/RuiPath_Open_Source_Intro."
+            )
+
+        mean, std = get_constants("imagenet")
+        eval_transform = get_eval_transforms(
+            mean,
+            std,
+            target_img_size=224,
+            interpolation=InterpolationMode.BILINEAR,
+            max_size=None,
+            antialias=True,
+        )
+        precision = torch.float16
+        return model, eval_transform, precision
+
+
 class GenBioPathFMInferenceEncoder(BasePatchEncoder):
 
     def __init__(self, **build_kwargs):
@@ -1750,6 +1882,8 @@ encoder_registry = {
     "musk": MuskInferenceEncoder,
     "openmidnight": OpenMidnightInferenceEncoder,
     "gpfm": GPFMInferenceEncoder,
+    "digepath": DigepathInferenceEncoder,
+    "rui_path": RuiPathInferenceEncoder,
     "hibou_l": HibouLInferenceEncoder,
     "kaiko-vitb8": KaikoB8InferenceEncoder,
     "kaiko-vitb16": KaikoB16InferenceEncoder,

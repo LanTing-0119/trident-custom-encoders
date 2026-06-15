@@ -48,6 +48,10 @@ Run checks before launching jobs:
 > [!NOTE]
 > Some models still require manual setup (e.g., local CHIEF repository path in `trident/slide_encoder_models/local_ckpts.json`) or HuggingFace gated access approvals.
 
+This fork also supports the `digepath` and `rui_path` patch encoders. See
+[Custom Patch Encoders](docs/custom_patch_encoders.md) for checkpoint and
+cluster configuration.
+
 ### 🔨 2. **Running Trident**:
 
 **Already familiar with WSI processing?** Perform segmentation, patching, and UNI feature extraction from a directory of WSIs with:
