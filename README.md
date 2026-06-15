@@ -48,9 +48,9 @@ Run checks before launching jobs:
 > [!NOTE]
 > Some models still require manual setup (e.g., local CHIEF repository path in `trident/slide_encoder_models/local_ckpts.json`) or HuggingFace gated access approvals.
 
-This fork also supports the `digepath` and `rui_path` patch encoders. See
-[Custom Patch Encoders](docs/custom_patch_encoders.md) for checkpoint and
-cluster configuration.
+This fork adds `digepath` and `rui_path` plus a portable offline layout for all
+patch encoders. See [Portable Patch Encoders](docs/custom_patch_encoders.md)
+for downloads, validation, and cluster configuration.
 
 ### 🔨 2. **Running Trident**:
 

@@ -1,90 +1,100 @@
-# Custom Patch Encoders
+# Portable Patch Encoders
 
-This fork adds two patch encoders to Trident:
+This fork provides a portable, offline layout for all Trident patch encoders.
+Set one environment variable on Windows or Linux:
 
-| Encoder | Architecture | Input | Output | Default checkpoint filename |
-| --- | --- | --- | --- | --- |
-| `digepath` | ViT-L/16 | 224 x 224 | 1024 | `digepath.model.safetensors` |
-| `rui_path` | ViT-L/16 | 224 x 224 | 1024 | `ruipath_visionfoundation_v1.0.bin` |
-
-Model checkpoints are not stored in Git. Configure them on each machine using
-one of the following methods.
-
-## Shared checkpoint directory
-
-Put both files in one directory:
-
-```text
-/path/to/patch_encoders/
-  digepath.model.safetensors
-  ruipath_visionfoundation_v1.0.bin
+```powershell
+$env:TRIDENT_PATCH_ENCODER_DIR = "C:\models\patch_encoders"
 ```
-
-Linux:
 
 ```bash
 export TRIDENT_PATCH_ENCODER_DIR=/path/to/patch_encoders
 ```
 
-PowerShell:
+`PATCH_ENCODER_DIR` is accepted as a backwards-compatible alias. An explicit
+`weights_path` argument or `<ENCODER_NAME>_WEIGHTS_PATH` environment variable
+overrides the shared directory.
 
-```powershell
-$env:TRIDENT_PATCH_ENCODER_DIR = "E:\Pathology_AI_Models\patch_encoders"
-```
+## Installation status
 
-## Per-model checkpoint paths
+- `ready`: 26 encoders, downloaded and tested with one-image GPU inference.
+- `blocked-gated`: `musk`, `h0-mini`, and `openmidnight`. The current
+  Hugging Face account must first be granted access.
+- `excluded-gemma4`: `gemma4-e4b` and `gemma4-26b`. They require
+  `transformers>=5` and are intentionally excluded from the shared
+  `transformers==4.42.4` environment.
 
-Per-model variables override the shared directory and `local_ckpts.json`:
+The machine-readable status is in
+[`patch_encoder_status.json`](patch_encoder_status.json).
 
-```bash
-export DIGEPATH_WEIGHTS_PATH=/path/to/digepath.model.safetensors
-export RUIPATH_WEIGHTS_PATH=/path/to/ruipath_visionfoundation_v1.0.bin
-```
-
-The batch CLI also supports an explicit path for one run:
-
-```bash
-python run_batch_of_slides.py \
-  --task feat \
-  --wsi_dir /path/to/wsis \
-  --job_dir /path/to/output \
-  --patch_encoder digepath \
-  --patch_encoder_ckpt_path /path/to/digepath.model.safetensors \
-  --mag 20 \
-  --patch_size 256 \
-  --gpus 0
-```
-
-## Installation
+## Environment
 
 ```bash
-git clone <your-fork-url>
-cd TRIDENT
-conda create -n trident python=3.10 -y
-conda activate trident
+conda env create -f environment_patch_encoders.yml
+conda activate trident-patch-encoders
 pip install -e .
 ```
 
-Verify both models after configuring the checkpoint paths:
+The MUSK dependency is pinned to commit
+`714b666969c1911e5efe70d991140a21030f4ef3`. OpenMidnight uses a local DINOv2
+checkout pinned by the downloader.
+
+## Download
+
+The downloader is idempotent: completed files are skipped and only the
+inference checkpoint format is downloaded.
+RuiPath is the sole manual checkpoint because it is distributed through
+ModelScope rather than Hugging Face.
 
 ```bash
-python - <<'PY'
-import torch
-from trident.patch_encoder_models import encoder_factory
-
-for name in ("digepath", "rui_path"):
-    encoder = encoder_factory(name).eval()
-    output = encoder(torch.zeros(1, 3, 224, 224))
-    print(name, tuple(output.shape))
-PY
+python scripts/download_patch_encoders.py \
+  --root /path/to/patch_encoders \
+  --json-output patch_encoder_install_status.json
 ```
 
-Expected output:
+After access is approved for the gated repositories:
 
-```text
-digepath (1, 1024)
-rui_path (1, 1024)
+```bash
+python scripts/download_patch_encoders.py \
+  --root /path/to/patch_encoders \
+  --include-gated \
+  --encoders musk h0-mini openmidnight
 ```
+
+Access pages:
+
+- https://huggingface.co/xiangjx/musk
+- https://huggingface.co/bioptimus/H0-mini
+- https://huggingface.co/SophontAI/OpenMidnight
+
+## Verification
+
+Load-only verification:
+
+```bash
+python scripts/verify_patch_encoders.py --root /path/to/patch_encoders
+```
+
+Sequential one-image GPU inference:
+
+```bash
+python scripts/verify_patch_encoders.py \
+  --root /path/to/patch_encoders \
+  --forward \
+  --device cuda \
+  --json-output patch_encoder_forward_validation.json
+```
+
+The verifier loads and releases one model at a time to limit GPU memory use.
+
+## Custom encoders
+
+This fork also adds:
+
+| Encoder | Architecture | Input | Output | Checkpoint |
+| --- | --- | --- | --- | --- |
+| `digepath` | ViT-L/16 | 224 x 224 | 1024 | `digepath.model.safetensors` |
+| `rui_path` | ViT-L/16 | 224 x 224 | 1024 | `ruipath_visionfoundation_v1.0.bin` |
 
 Sources:
 

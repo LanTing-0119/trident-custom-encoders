@@ -6,6 +6,7 @@ import os
 
 from trident.patch_encoder_models.utils.constants import get_constants
 from trident.patch_encoder_models.utils.transform_utils import get_eval_transforms
+from trident.patch_encoder_models.manifest import checkpoint_path
 from trident.IO import get_weights_path, has_internet_connection
 
 """
@@ -145,22 +146,33 @@ class BasePatchEncoder(torch.nn.Module):
         if self.weights_path:
             self.ensure_valid_weights_path(self.weights_path)
             return self.weights_path
-        else:
-            weights_path = get_weights_path('patch', self.enc_name)
+        env_name = f"{self.enc_name.upper().replace('-', '_')}_WEIGHTS_PATH"
+        weights_path = os.environ.get(env_name)
+        if weights_path:
             self.ensure_valid_weights_path(weights_path)
             return weights_path
+
+        weights_root = os.environ.get("TRIDENT_PATCH_ENCODER_DIR") or os.environ.get("PATCH_ENCODER_DIR")
+        if weights_root:
+            portable_path = checkpoint_path(weights_root, self.enc_name)
+            if portable_path and portable_path.exists():
+                return str(portable_path)
+
+        weights_path = get_weights_path('patch', self.enc_name)
+        self.ensure_valid_weights_path(weights_path)
+        return weights_path
 
     def _get_portable_weights_path(self, env_var: str, filename: str) -> str:
         """Resolve a checkpoint from an explicit env var, shared model dir, or registry."""
         weights_path = os.environ.get(env_var)
-        if not weights_path:
-            weights_root = os.environ.get("TRIDENT_PATCH_ENCODER_DIR")
-            if weights_root:
-                weights_path = os.path.join(weights_root, filename)
         if weights_path:
             self.ensure_valid_weights_path(weights_path)
             return weights_path
         return self._get_weights_path()
+
+    @staticmethod
+    def _model_dir(weights_path: str) -> str:
+        return weights_path if os.path.isdir(weights_path) else os.path.dirname(weights_path)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -212,36 +224,31 @@ class KeepInferenceEncoder(BasePatchEncoder):
         super().__init__(**build_kwargs)
 
     def _build(self):
-        from transformers import AutoModel, AutoTokenizer
+        import timm
+        from transformers import AutoModel
         from torchvision import transforms
 
         self.enc_name = 'keep'
         weights_path = self._get_weights_path()
+        original_layer_scale = timm.models.vision_transformer.LayerScale
 
-        if weights_path:
-            model_source = weights_path
-            if os.path.isfile(model_source):
-                model_source = os.path.dirname(model_source)
-            try:
+        try:
+            if weights_path:
+                model_source = weights_path
+                if os.path.isfile(model_source):
+                    model_source = os.path.dirname(model_source)
                 model = AutoModel.from_pretrained(model_source, trust_remote_code=True)
-                _ = AutoTokenizer.from_pretrained(model_source, trust_remote_code=True)
-            except Exception:
-                traceback.print_exc()
-                raise Exception(
-                    "Failed to load KEEP from local checkpoint path. "
-                    "Set `keep` in `trident/patch_encoder_models/local_ckpts.json` to a local Hugging Face model directory."
-                )
-        else:
-            self.ensure_has_internet(self.enc_name)
-            try:
+            else:
+                self.ensure_has_internet(self.enc_name)
                 model = AutoModel.from_pretrained("Astaxanthin/KEEP", trust_remote_code=True)
-                _ = AutoTokenizer.from_pretrained("Astaxanthin/KEEP", trust_remote_code=True)
-            except Exception:
-                traceback.print_exc()
-                raise Exception(
-                    "Failed to download KEEP model from Hugging Face. "
-                    "Set `keep` in `trident/patch_encoder_models/local_ckpts.json` for offline use."
-                )
+        except Exception:
+            traceback.print_exc()
+            source = f"local checkpoint at '{weights_path}'" if weights_path else "Hugging Face"
+            raise Exception(f"Failed to load KEEP from {source}.")
+        finally:
+            # KEEP's remote modeling file replaces timm's global LayerScale class.
+            # Restore it so subsequently-created encoders keep their native state keys.
+            timm.models.vision_transformer.LayerScale = original_layer_scale
 
         eval_transform = transforms.Compose([
             transforms.Resize(size=224, interpolation=transforms.InterpolationMode.BICUBIC),
@@ -289,7 +296,12 @@ class MuskInferenceEncoder(BasePatchEncoder):
         weights_path = self._get_weights_path()
 
         if weights_path:
-            raise NotImplementedError("MUSK doesn't support local model loading. PR welcome!")
+            try:
+                model = timm.create_model("musk_large_patch16_384")
+                utils.load_model_and_may_interpolate(weights_path, model, "model|module", "")
+            except Exception:
+                traceback.print_exc()
+                raise Exception(f"Failed to load MUSK from '{weights_path}'.")
         else:
             self.ensure_has_internet(self.enc_name)
             try:
@@ -438,7 +450,7 @@ class PhikonInferenceEncoder(BasePatchEncoder):
 
         if weights_path:
             try:
-                model_dir = os.path.dirname(weights_path)
+                model_dir = self._model_dir(weights_path)
                 model = ViTModel.from_pretrained(model_dir, add_pooling_layer=False, local_files_only=True)
             except:
                 traceback.print_exc()
@@ -485,7 +497,15 @@ class HibouLInferenceEncoder(BasePatchEncoder):
         weights_path = self._get_weights_path()
 
         if weights_path:
-            raise NotImplementedError("Hibou-Large doesn't support local model loading. PR welcome!")
+            try:
+                model = AutoModel.from_pretrained(
+                    self._model_dir(weights_path),
+                    trust_remote_code=True,
+                    local_files_only=True,
+                )
+            except Exception:
+                traceback.print_exc()
+                raise Exception(f"Failed to load Hibou-L from '{weights_path}'.")
         else:
             self.ensure_has_internet(self.enc_name)
             try:
@@ -650,7 +670,7 @@ class ResNet50InferenceEncoder(BasePatchEncoder):
         if weights_path:
             try:
                 model = timm.create_model("resnet50", pretrained=False, **timm_kwargs)
-                if weights_path.suffix == ".safetensors":
+                if os.path.splitext(weights_path)[1].lower() == ".safetensors":
                     from safetensors.torch import load_file
                     state_dict = load_file(weights_path)
                 else:
@@ -1190,8 +1210,8 @@ class Phikonv2InferenceEncoder(BasePatchEncoder):
 
         if weights_path:
             try:
-                model_dir = os.path.dirname(weights_path)
-                model = AutoModel.from_pretrained(model_dir)
+                model_dir = self._model_dir(weights_path)
+                model = AutoModel.from_pretrained(model_dir, local_files_only=True)
             except:
                 traceback.print_exc()
                 raise Exception(
@@ -1275,8 +1295,8 @@ class Midnight12kInferenceEncoder(BasePatchEncoder):
 
         if weights_path:
             try:
-                model_dir = os.path.dirname(weights_path)
-                model = AutoModel.from_pretrained(model_dir)
+                model_dir = self._model_dir(weights_path)
+                model = AutoModel.from_pretrained(model_dir, local_files_only=True)
             except:
                 traceback.print_exc()
                 raise Exception(
@@ -1336,25 +1356,41 @@ class H0MiniInferenceEncoder(BasePatchEncoder):
         self.return_type = return_type
 
         if weights_path:
-            raise NotImplementedError(
-                "H0-mini currently supports loading from Hugging Face only. "
-                "Please leave `weights_path` unset."
-            )
-
-        self.ensure_has_internet(self.enc_name)
-        try:
             model = timm.create_model(
-                "hf-hub:bioptimus/H0-mini",
-                pretrained=True,
+                "vit_small_patch14_reg4_dinov2",
+                pretrained=False,
+                num_classes=0,
+                img_size=224,
+                init_values=1e-5,
+                dynamic_img_size=True,
                 mlp_layer=timm.layers.SwiGLUPacked,
                 act_layer=torch.nn.SiLU,
             )
-        except Exception:
-            traceback.print_exc()
-            raise Exception(
-                "Failed to download H0-mini model, make sure that you were granted access "
-                "and that you correctly registered your token"
-            )
+            try:
+                if os.path.splitext(weights_path)[1].lower() == ".safetensors":
+                    from safetensors.torch import load_file
+                    state_dict = load_file(weights_path)
+                else:
+                    state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
+                model.load_state_dict(state_dict, strict=True)
+            except Exception:
+                traceback.print_exc()
+                raise Exception(f"Failed to load H0-mini from '{weights_path}'.")
+        else:
+            self.ensure_has_internet(self.enc_name)
+            try:
+                model = timm.create_model(
+                    "hf-hub:bioptimus/H0-mini",
+                    pretrained=True,
+                    mlp_layer=timm.layers.SwiGLUPacked,
+                    act_layer=torch.nn.SiLU,
+                )
+            except Exception:
+                traceback.print_exc()
+                raise Exception(
+                    "Failed to download H0-mini model, make sure that you were granted access "
+                    "and that you correctly registered your token"
+                )
 
         # timm>=0.9 expects the model instance directly here.
         data_config = resolve_model_data_config(model)
@@ -1394,12 +1430,28 @@ class OpenMidnightInferenceEncoder(BasePatchEncoder):
         self.enc_name = "openmidnight"
         weights_path = self._get_weights_path()
 
+        dinov2_repo = os.environ.get("DINOV2_REPO_DIR")
+        if not dinov2_repo:
+            weights_root = os.environ.get("TRIDENT_PATCH_ENCODER_DIR") or os.environ.get("PATCH_ENCODER_DIR")
+            if weights_root:
+                candidate = os.path.join(weights_root, "dinov2")
+                if os.path.isdir(candidate):
+                    dinov2_repo = candidate
+
         try:
-            model = torch.hub.load(
-                "facebookresearch/dinov2",
-                "dinov2_vitg14_reg",
-                pretrained=False,
-            )
+            if dinov2_repo:
+                model = torch.hub.load(
+                    dinov2_repo,
+                    "dinov2_vitg14_reg",
+                    pretrained=False,
+                    source="local",
+                )
+            else:
+                model = torch.hub.load(
+                    "facebookresearch/dinov2",
+                    "dinov2_vitg14_reg",
+                    pretrained=False,
+                )
         except Exception:
             traceback.print_exc()
             raise Exception("Failed to initialize DINOv2 ViT-G/14 backbone for OpenMidnight.")

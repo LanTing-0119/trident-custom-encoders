@@ -1,0 +1,23 @@
+name: trident-patch-encoders
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - git
+  - pytorch=2.3.1
+  - torchvision=0.18.1
+  - pytorch-cuda=12.1
+  - pip:
+      - huggingface_hub==0.36.2
+      - safetensors==0.7.0
+      - transformers==4.42.4
+      - timm==0.9.16
+      - einops
+      - einops_exts
+      - fairscale==0.4.13
+      - timm_ctp==0.5.4
+      - git+https://github.com/Mahmoodlab/CONCH.git
+      - git+https://github.com/lilab-stanford/MUSK.git@714b666969c1911e5efe70d991140a21030f4ef3

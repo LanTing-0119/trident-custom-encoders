@@ -1,0 +1,39 @@
+{
+  "ready": [
+    "conch_v1",
+    "conch_v15",
+    "uni_v1",
+    "uni_v2",
+    "ctranspath",
+    "phikon",
+    "phikon_v2",
+    "resnet50",
+    "keep",
+    "gigapath",
+    "virchow",
+    "virchow2",
+    "hoptimus0",
+    "hoptimus1",
+    "gpfm",
+    "digepath",
+    "rui_path",
+    "hibou_l",
+    "kaiko-vitb8",
+    "kaiko-vitb16",
+    "kaiko-vits8",
+    "kaiko-vits16",
+    "kaiko-vitl14",
+    "lunit-vits8",
+    "midnight12k",
+    "genbio-pathfm"
+  ],
+  "blocked-gated": [
+    "musk",
+    "h0-mini",
+    "openmidnight"
+  ],
+  "excluded-gemma4": [
+    "gemma4-e4b",
+    "gemma4-26b"
+  ]
+}

@@ -62,3 +62,4 @@ rosai_processed/
 *.pt
 *.pth
 *.safetensors
+.trident_runtime_cache/

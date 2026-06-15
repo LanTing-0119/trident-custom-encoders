@@ -34,6 +34,11 @@ from trident.patch_encoder_models.load import (
     Gemma4E4BInferenceEncoder,
     Gemma426BInferenceEncoder,
 )
+from trident.patch_encoder_models.manifest import (
+    BLOCKED_GATED_ENCODERS,
+    EXCLUDED_ENCODERS,
+    PATCH_ENCODER_LAYOUT,
+)
 
 __all__ = [
     "encoder_registry",
@@ -70,4 +75,7 @@ __all__ = [
     "GenBioPathFMInferenceEncoder",
     "Gemma4E4BInferenceEncoder",
     "Gemma426BInferenceEncoder",
+    "PATCH_ENCODER_LAYOUT",
+    "BLOCKED_GATED_ENCODERS",
+    "EXCLUDED_ENCODERS",
 ]
