@@ -14,6 +14,8 @@
     "virchow2",
     "hoptimus0",
     "hoptimus1",
+    "musk",
+    "openmidnight",
     "gpfm",
     "digepath",
     "rui_path",
@@ -28,9 +30,7 @@
     "genbio-pathfm"
   ],
   "blocked-gated": [
-    "musk",
-    "h0-mini",
-    "openmidnight"
+    "h0-mini"
   ],
   "excluded-gemma4": [
     "gemma4-e4b",

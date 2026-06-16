@@ -17,9 +17,9 @@ overrides the shared directory.
 
 ## Installation status
 
-- `ready`: 26 encoders, downloaded and tested with one-image GPU inference.
-- `blocked-gated`: `musk`, `h0-mini`, and `openmidnight`. The current
-  Hugging Face account must first be granted access.
+- `ready`: 28 encoders, downloaded and tested with one-image GPU inference.
+- `blocked-gated`: `h0-mini`. The current Hugging Face account still reports
+  that access to `bioptimus/H0-mini` is awaiting review.
 - `excluded-gemma4`: `gemma4-e4b` and `gemma4-26b`. They require
   `transformers>=5` and are intentionally excluded from the shared
   `transformers==4.42.4` environment.
@@ -52,13 +52,13 @@ python scripts/download_patch_encoders.py \
   --json-output patch_encoder_install_status.json
 ```
 
-After access is approved for the gated repositories:
+After access is approved for the remaining gated repository:
 
 ```bash
 python scripts/download_patch_encoders.py \
   --root /path/to/patch_encoders \
   --include-gated \
-  --encoders musk h0-mini openmidnight
+  --encoders h0-mini
 ```
 
 Access pages:
